@@ -1,2 +1,15 @@
-bin
-bin/*
+# Compiled output
+bin/
+*.class
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+sources.txt
