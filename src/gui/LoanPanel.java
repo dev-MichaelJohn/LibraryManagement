@@ -51,8 +51,13 @@ public class LoanPanel extends JPanel {
             LoanFormDialog d = new LoanFormDialog(owner, new Runnable() { @Override public void run() { loadLoans(); } });
             d.setVisible(true);
         });
+        
+        JButton exportBtn = new JButton("Export to CSV");
+        exportBtn.addActionListener(e -> exportCurrentTableToCSV());
+        
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         right.add(addBtn);
+        right.add(exportBtn);
         top.add(right, BorderLayout.EAST);
 
         add(top, BorderLayout.NORTH);
@@ -367,5 +372,82 @@ public class LoanPanel extends JPanel {
 
         if(anyFailed) JOptionPane.showMessageDialog(this, "Some deletes failed:\n" + errors.toString(), "Partial Failure", JOptionPane.WARNING_MESSAGE); else JOptionPane.showMessageDialog(this, "Deleted.", "Deleted", JOptionPane.INFORMATION_MESSAGE);
         loadLoans();
+    }
+
+    private void exportCurrentTableToCSV() {
+        // Get the currently active table based on selected tab
+        JTabbedPane tabs = null;
+        JTable currentTable = null;
+        
+        // Find the tabbed pane by traversing the component hierarchy
+        for(Component c : this.getComponents()) {
+            if(c instanceof JTabbedPane) {
+                tabs = (JTabbedPane)c;
+                int selectedIdx = tabs.getSelectedIndex();
+                Component tab = tabs.getComponentAt(selectedIdx);
+                // Find the JTable inside the tab (wrapped in JScrollPane)
+                if(tab instanceof JScrollPane) {
+                    JScrollPane sp = (JScrollPane)tab;
+                    if(sp.getViewport().getView() instanceof JTable) {
+                        currentTable = (JTable)sp.getViewport().getView();
+                    }
+                }
+                break;
+            }
+        }
+        
+        if(currentTable == null) {
+            JOptionPane.showMessageDialog(this, "No table found to export.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // Open file chooser to save
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Export Loans to CSV");
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
+        int result = fileChooser.showSaveDialog(this);
+        
+        if(result != JFileChooser.APPROVE_OPTION) return;
+        
+        java.io.File file = fileChooser.getSelectedFile();
+        String filePath = file.getAbsolutePath();
+        if(!filePath.toLowerCase().endsWith(".csv")) {
+            filePath += ".csv";
+        }
+        
+        try {
+            // Write CSV
+            java.io.PrintWriter writer = new java.io.PrintWriter(new java.io.FileWriter(filePath));
+            
+            // Write header
+            javax.swing.table.TableModel model = currentTable.getModel();
+            StringBuilder header = new StringBuilder();
+            for(int i = 0; i < model.getColumnCount(); i++) {
+                if(i > 0) header.append(",");
+                String colName = model.getColumnName(i);
+                // Escape quotes in column name
+                header.append("\"").append(colName.replace("\"", "\"\"")).append("\"");
+            }
+            writer.println(header.toString());
+            
+            // Write data rows
+            for(int row = 0; row < model.getRowCount(); row++) {
+                StringBuilder rowStr = new StringBuilder();
+                for(int col = 0; col < model.getColumnCount(); col++) {
+                    if(col > 0) rowStr.append(",");
+                    Object val = model.getValueAt(row, col);
+                    String cellStr = val == null ? "" : val.toString();
+                    // Escape quotes and wrap in quotes
+                    rowStr.append("\"").append(cellStr.replace("\"", "\"\"")).append("\"");
+                }
+                writer.println(rowStr.toString());
+            }
+            
+            writer.close();
+            JOptionPane.showMessageDialog(this, "Exported " + model.getRowCount() + " rows to:\n" + filePath, "Export Success", JOptionPane.INFORMATION_MESSAGE);
+        } catch(Exception ex) {
+            JOptionPane.showMessageDialog(this, "Failed to export: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
     }
 }

@@ -56,6 +56,19 @@ public class BookTablePanel extends JPanel {
             }
         });
         rightWrap.add(importBtn);
+        JButton exportBtn = new JButton("Export CSV");
+        exportBtn.setBorder(BorderFactory.createEmptyBorder(6,10,6,10));
+        exportBtn.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser();
+            fc.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
+            fc.setSelectedFile(new File("books_export.csv"));
+            int rv = fc.showSaveDialog(BookTablePanel.this);
+            if(rv == JFileChooser.APPROVE_OPTION) {
+                File f = fc.getSelectedFile();
+                exportTableToCSV(f);
+            }
+        });
+        rightWrap.add(exportBtn);
         top.add(rightWrap, BorderLayout.EAST);
 
         // Add search inside the Books tab (debounced SearchPanel)
@@ -656,5 +669,40 @@ public class BookTablePanel extends JPanel {
                 loadBooks();
             }
         }.execute();
+    }
+
+    /**
+     * Exports the currently displayed table data to a CSV file.
+     * 
+     * @param file The file to save the CSV data to.
+     */
+    private void exportTableToCSV(File file) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            // Write header
+            StringBuilder header = new StringBuilder();
+            for(int i = 0; i < tableModel.getColumnCount(); i++) {
+                if(i > 0) header.append(",");
+                header.append("\"").append(tableModel.getColumnName(i)).append("\"");
+            }
+            writer.println(header.toString());
+
+            // Write data rows
+            for(int row = 0; row < tableModel.getRowCount(); row++) {
+                StringBuilder rowData = new StringBuilder();
+                for(int col = 0; col < tableModel.getColumnCount(); col++) {
+                    if(col > 0) rowData.append(",");
+                    Object value = tableModel.getValueAt(row, col);
+                    String strValue = value != null ? value.toString() : "";
+                    // Escape quotes and wrap in quotes
+                    strValue = strValue.replace("\"", "\"\"");
+                    rowData.append("\"").append(strValue).append("\"");
+                }
+                writer.println(rowData.toString());
+            }
+
+            JOptionPane.showMessageDialog(this, "Books exported successfully to:\n" + file.getAbsolutePath(), "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+        } catch(IOException ex) {
+            JOptionPane.showMessageDialog(this, "Failed to export: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 }
