@@ -21,7 +21,13 @@ C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\BookLoan\Delete
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\BookLoan\InsertBookLoanBuilder.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\BookLoan\ReadBookLoanBuilder.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\BookLoan\UpdateBookLoanBuilder.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\Borrower\BorrowerBuilder.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\Borrower\DeleteBorrowerBuilder.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\Borrower\InsertBorrowerBuilder.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\Borrower\ReadBorrowerBuilder.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\lib\Borrower\UpdateBorrowerBuilder.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\myGUI\LibraryManager.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\service\BookGenreService.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\service\BookLoanService.java
 C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\service\BookService.java
+C:\Users\Darkuz69\Documents\Projects\IP-101\test-project\src\service\BorrowerService.java

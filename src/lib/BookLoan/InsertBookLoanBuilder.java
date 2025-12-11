@@ -35,6 +35,20 @@ public class InsertBookLoanBuilder extends BookLoanBuilder<InsertBookLoanBuilder
     }
 
     /**
+     * Sets the borrower ID for the new book loan record.
+     * 
+     * @param borrowerID The borrower ID of the book loan record.
+     * @return The current InsertBookLoanBuilder instance.
+     */
+    public InsertBookLoanBuilder SetBorrowerID(int borrowerID) {
+        if(borrowerID <= 0) throw new IllegalArgumentException("Borrower ID must be positive");
+        if(this.borrowerID != 0) throw new IllegalStateException("Borrower ID has already been set");
+
+        this.borrowerID = borrowerID;
+        return this.SetField("borrower_id", borrowerID);
+    }
+
+    /**
      * Sets the borrowed date/time for the new book loan record.
      * 
      * @param borrowedAt The date/time when the book was borrowed.
@@ -65,11 +79,17 @@ public class InsertBookLoanBuilder extends BookLoanBuilder<InsertBookLoanBuilder
      * 
      * @return true if the insert was successful, false otherwise.
      */
+    /**
+     * Executes the insert operation to add the new book loan record to the database.
+     * 
+     * @return true if the insert was successful, false otherwise.
+     */
     public boolean Insert() {
         if(this.bookID == 0) throw new IllegalStateException("Book ID must be set before inserting");
+        if(this.borrowerID == 0) throw new IllegalStateException("Borrower ID must be set before inserting");
         if(this.borrowedAt == null) throw new IllegalStateException("borrowedAt must be set before inserting");
 
-        String baseStatement = "INSERT INTO book_loans (book_id, borrowed_at, due_date) VALUES (?, ?, ?)";
+        String baseStatement = "INSERT INTO book_loans (book_id, borrower_id, borrowed_at, due_date) VALUES (?, ?, ?, ?)";
         int rowsAffected;
         try {
             rowsAffected = dbConnection.ExecuteUpdate(baseStatement, this.GetValues().toArray());

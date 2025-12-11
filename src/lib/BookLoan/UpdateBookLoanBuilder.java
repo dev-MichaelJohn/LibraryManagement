@@ -25,12 +25,32 @@ public class UpdateBookLoanBuilder extends BookLoanBuilder<UpdateBookLoanBuilder
      * @param dueDate The new due date for the loan.
      * @return The current UpdateBookLoanBuilder instance.
      */
+    /**
+     * Sets the due date value for the book loan record being updated.
+     * 
+     * @param dueDate The new due date for the loan.
+     * @return The current UpdateBookLoanBuilder instance.
+     */
     public UpdateBookLoanBuilder SetDueDate(Date dueDate) {
         if(dueDate == null) throw new IllegalStateException("Due date cannot be null or empty");
         if(this.dueDate != null) throw new IllegalStateException("Due date has been already set");
 
         this.dueDate = dueDate;
         return this.SetField("due_date", dueDate);
+    }
+
+    /**
+     * Sets the borrower ID value for the book loan record being updated.
+     * 
+     * @param borrowerID The new borrower ID for the loan.
+     * @return The current UpdateBookLoanBuilder instance.
+     */
+    public UpdateBookLoanBuilder SetBorrowerID(int borrowerID) {
+        if(borrowerID <= 0) throw new IllegalStateException("Borrower ID cannot be less than or equal to 0");
+        if(this.borrowerID != 0) throw new IllegalStateException("Borrower ID has already been set");
+
+        this.borrowerID = borrowerID;
+        return this.SetField("borrower_id", borrowerID);
     }
 
     /**

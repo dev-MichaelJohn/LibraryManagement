@@ -2,6 +2,7 @@ package gui;
 
 import service.BookLoanService;
 import service.BookService;
+import service.BorrowerService;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -31,6 +32,8 @@ public class LoanPanel extends JPanel {
 
     // cache for book titles keyed by book id to avoid repeated DB queries
     private Map<Integer,String> bookTitleCache = new HashMap<>();
+    // cache for borrower full names keyed by borrower id
+    private Map<Integer,String> borrowerNameCache = new HashMap<>();
 
     public LoanPanel(JFrame owner) {
         super(new BorderLayout());
@@ -54,7 +57,7 @@ public class LoanPanel extends JPanel {
 
         add(top, BorderLayout.NORTH);
 
-        String[] cols = new String[] {"ID", "BookID", "BorrowedAt", "DueDate", "ReturnedAt"};
+        String[] cols = new String[] {"ID", "BookID", "Borrower", "BorrowedAt", "DueDate", "ReturnedAt"};
         allModel = new DefaultTableModel(cols, 0) { @Override public boolean isCellEditable(int r,int c){ return false; } };
         allTable = new JTable(allModel);
 
@@ -99,10 +102,34 @@ public class LoanPanel extends JPanel {
             }
         };
 
+        // Renderer that shows borrower full name for the borrower id
+        javax.swing.table.TableCellRenderer borrowerRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                String text = "";
+                if(value != null) {
+                    try {
+                        int bid = Integer.parseInt(String.valueOf(value));
+                        String b = borrowerNameCache.get(bid);
+                        text = (b != null) ? b : String.valueOf(bid);
+                    } catch(Exception ex) {
+                        text = String.valueOf(value);
+                    }
+                }
+                setText(text);
+                return this;
+            }
+        };
+
         allTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);
+        allTable.getColumnModel().getColumn(2).setCellRenderer(borrowerRenderer);
         overdueTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);
+        overdueTable.getColumnModel().getColumn(2).setCellRenderer(borrowerRenderer);
         reservationsTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);
+        reservationsTable.getColumnModel().getColumn(2).setCellRenderer(borrowerRenderer);
         returnedTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);
+        returnedTable.getColumnModel().getColumn(2).setCellRenderer(borrowerRenderer);
 
         // share common mouse handlers
         MouseAdapter ma = new MouseAdapter() {
@@ -151,19 +178,41 @@ public class LoanPanel extends JPanel {
             for(Map<String,Object> r : rows) {
                 Object id = r.getOrDefault("id", r.getOrDefault("loan_id", ""));
                 Object bookIdObj = r.getOrDefault("book_id", "");
+                Object borrowerIdObj = r.getOrDefault("borrower_id", "");
                 Object borrowed = r.getOrDefault("borrowed_at", "");
                 Object due = r.getOrDefault("due_date", "");
                 Object returned = r.getOrDefault("returned_at", "");
 
                 int bookIdInt = 0;
+                int borrowerIdInt = 0;
                 try { bookIdInt = Integer.parseInt(String.valueOf(bookIdObj)); } catch(Exception ignore) {}
+                try { borrowerIdInt = Integer.parseInt(String.valueOf(borrowerIdObj)); } catch(Exception ignore) {}
 
                 if(bookIdInt > 0 && !bookTitleCache.containsKey(bookIdInt)) {
                     try { List<Map<String,Object>> brows = BookService.ReadBook().WhereBookID(bookIdInt).Read(); if(!brows.isEmpty()) bookTitleCache.put(bookIdInt, String.valueOf(brows.get(0).getOrDefault("title", ""))); } catch(Exception ignore) {}
                 }
 
+                if(borrowerIdInt > 0 && !borrowerNameCache.containsKey(borrowerIdInt)) {
+                    try {
+                        BorrowerService borrowerService = new BorrowerService();
+                        List<Map<String,Object>> brows = borrowerService.ReadBorrower().WhereID(borrowerIdInt).Read();
+                        if(!brows.isEmpty()) {
+                            Map<String,Object> brow = brows.get(0);
+                            String lastName = String.valueOf(brow.getOrDefault("last_name", ""));
+                            String firstName = String.valueOf(brow.getOrDefault("first_name", ""));
+                            String middleName = String.valueOf(brow.getOrDefault("middle_name", ""));
+                            String fullName = lastName + ", " + firstName;
+                            if(middleName != null && !middleName.isEmpty() && !"null".equalsIgnoreCase(middleName)) {
+                                fullName += " " + middleName;
+                            }
+                            borrowerNameCache.put(borrowerIdInt, fullName);
+                        }
+                    } catch(Exception ignore) {}
+                }
+
                 Object bookModelValue = (bookIdInt != 0) ? bookIdInt : bookIdObj;
-                allModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                Object borrowerModelValue = (borrowerIdInt != 0) ? borrowerIdInt : borrowerIdObj;
+                allModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
 
                 boolean isOverdue = false;
                 if(returned == null || String.valueOf(returned).trim().isEmpty()) {
@@ -171,7 +220,7 @@ public class LoanPanel extends JPanel {
                     try { java.time.LocalDate dueDate = java.time.LocalDate.parse(dueStr); if(dueDate.isBefore(today)) isOverdue = true; }
                     catch(Exception pe) { try { if(!dueStr.isEmpty() && dueStr.compareTo(today.toString()) < 0) isOverdue = true; } catch(Exception ignore) { } }
                 }
-                if(isOverdue) overdueModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                if(isOverdue) overdueModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
 
                 boolean isReservation = false;
                 try {
@@ -181,11 +230,11 @@ public class LoanPanel extends JPanel {
                         if(b.isAfter(today)) isReservation = true;
                     }
                 } catch(Exception ignore) { try { if(String.valueOf(borrowed).compareTo(today.toString()) > 0) isReservation = true; } catch(Exception i) {} }
-                if(isReservation) reservationsModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                if(isReservation) reservationsModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
 
                 boolean isReturned = false;
                 if(returned != null && !String.valueOf(returned).trim().isEmpty()) isReturned = true;
-                if(isReturned) returnedModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                if(isReturned) returnedModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
             }
         } catch(Exception ex) {
             ex.printStackTrace();
@@ -216,18 +265,41 @@ public class LoanPanel extends JPanel {
             for(Map<String,Object> r : rows) {
                 Object id = r.getOrDefault("id", r.getOrDefault("loan_id", ""));
                 Object bookIdObj = r.getOrDefault("book_id", "");
+                Object borrowerIdObj = r.getOrDefault("borrower_id", "");
                 Object borrowed = r.getOrDefault("borrowed_at", "");
                 Object due = r.getOrDefault("due_date", "");
                 Object returned = r.getOrDefault("returned_at", "");
 
                 int bookIdInt = 0;
+                int borrowerIdInt = 0;
                 try { bookIdInt = Integer.parseInt(String.valueOf(bookIdObj)); } catch(Exception ignore) {}
+                try { borrowerIdInt = Integer.parseInt(String.valueOf(borrowerIdObj)); } catch(Exception ignore) {}
+
                 if(bookIdInt > 0 && !bookTitleCache.containsKey(bookIdInt)) {
                     try { List<Map<String,Object>> brows = BookService.ReadBook().WhereBookID(bookIdInt).Read(); if(!brows.isEmpty()) bookTitleCache.put(bookIdInt, String.valueOf(brows.get(0).getOrDefault("title", ""))); } catch(Exception ignore) {}
                 }
 
+                if(borrowerIdInt > 0 && !borrowerNameCache.containsKey(borrowerIdInt)) {
+                    try {
+                        BorrowerService borrowerService = new BorrowerService();
+                        List<Map<String,Object>> brows = borrowerService.ReadBorrower().WhereID(borrowerIdInt).Read();
+                        if(!brows.isEmpty()) {
+                            Map<String,Object> brow = brows.get(0);
+                            String lastName = String.valueOf(brow.getOrDefault("last_name", ""));
+                            String firstName = String.valueOf(brow.getOrDefault("first_name", ""));
+                            String middleName = String.valueOf(brow.getOrDefault("middle_name", ""));
+                            String fullName = lastName + ", " + firstName;
+                            if(middleName != null && !middleName.isEmpty() && !"null".equalsIgnoreCase(middleName)) {
+                                fullName += " " + middleName;
+                            }
+                            borrowerNameCache.put(borrowerIdInt, fullName);
+                        }
+                    } catch(Exception ignore) {}
+                }
+
                 Object bookModelValue = (bookIdInt != 0) ? bookIdInt : bookIdObj;
-                allModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                Object borrowerModelValue = (borrowerIdInt != 0) ? borrowerIdInt : borrowerIdObj;
+                allModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
 
                 boolean isOverdue = false;
                 if(returned == null || String.valueOf(returned).trim().isEmpty()) {
@@ -235,7 +307,7 @@ public class LoanPanel extends JPanel {
                     try { java.time.LocalDate dueDate = java.time.LocalDate.parse(dueStr); if(dueDate.isBefore(today)) isOverdue = true; }
                     catch(Exception pe) { try { if(!dueStr.isEmpty() && dueStr.compareTo(today.toString()) < 0) isOverdue = true; } catch(Exception ignore) { } }
                 }
-                if(isOverdue) overdueModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                if(isOverdue) overdueModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
 
                 boolean isReservation = false;
                 try {
@@ -245,7 +317,7 @@ public class LoanPanel extends JPanel {
                         if(b.isAfter(today)) isReservation = true;
                     }
                 } catch(Exception ignore) { try { if(String.valueOf(borrowed).compareTo(today.toString()) > 0) isReservation = true; } catch(Exception i) {} }
-                if(isReservation) reservationsModel.addRow(new Object[] { id, bookModelValue, borrowed, due, returned });
+                if(isReservation) reservationsModel.addRow(new Object[] { id, bookModelValue, borrowerModelValue, borrowed, due, returned });
             }
         } catch(Exception ex) {
             ex.printStackTrace();
@@ -266,15 +338,17 @@ public class LoanPanel extends JPanel {
     private void showUpdateDialogForRow(int row, JTable src) {
         Object idObj = src.getValueAt(row, 0);
         Object bookIdObj = src.getValueAt(row, 1);
-        Object borrowed = src.getValueAt(row, 2);
-        Object due = src.getValueAt(row, 3);
-        Object returned = src.getValueAt(row, 4);
+        Object borrowerIdObj = src.getValueAt(row, 2);
+        Object borrowed = src.getValueAt(row, 3);
+        Object due = src.getValueAt(row, 4);
+        Object returned = src.getValueAt(row, 5);
 
-        int id; int bookId;
+        int id; int bookId; int borrowerId;
         try { id = Integer.parseInt(String.valueOf(idObj)); } catch(Exception ex) { JOptionPane.showMessageDialog(this, "Invalid loan id", "Error", JOptionPane.ERROR_MESSAGE); return; }
         try { bookId = Integer.parseInt(String.valueOf(bookIdObj)); } catch(Exception ex) { bookId = 0; }
+        try { borrowerId = Integer.parseInt(String.valueOf(borrowerIdObj)); } catch(Exception ex) { borrowerId = 0; }
 
-        LoanFormDialog d = new LoanFormDialog(owner, id, bookId, String.valueOf(due), String.valueOf(borrowed), String.valueOf(returned), new Runnable() { @Override public void run() { loadLoans(); } });
+        LoanFormDialog d = new LoanFormDialog(owner, id, bookId, borrowerId, String.valueOf(due), String.valueOf(borrowed), String.valueOf(returned), new Runnable() { @Override public void run() { loadLoans(); } });
         d.setVisible(true);
     }
 

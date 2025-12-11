@@ -69,6 +69,20 @@ public class DeleteBookLoanBuilder extends BookLoanBuilder<DeleteBookLoanBuilder
         this.bookID = bookID;
         return this.SetField("book_id", bookID);
     }
+
+    /**
+     * Sets the borrower ID condition for deleting book loan records.
+     * 
+     * @param borrowerID The borrower ID to filter by for deletion.
+     * @return The current DeleteBookLoanBuilder instance.
+     */
+    public DeleteBookLoanBuilder WhereBorrowerID(int borrowerID) {
+        if(borrowerID <= 0) throw new IllegalStateException("Borrower ID cannot be less than or equal to 0");
+        if(this.borrowerID != 0) throw new IllegalStateException("Borrower ID has already been set");
+
+        this.borrowerID = borrowerID;
+        return this.SetField("borrower_id", borrowerID);
+    }
     
     /**
      * Sets the ID condition for deleting a specific book loan record.

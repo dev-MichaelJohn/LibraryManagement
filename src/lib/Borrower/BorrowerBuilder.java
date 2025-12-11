@@ -1,28 +1,26 @@
-package lib.BookLoan;
+package lib.Borrower;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 /**
- * Abstract base builder class for book loan related operations.
+ * Abstract base builder class for borrower-related operations.
  * 
  * @param <T> The type of the concrete builder extending this class.
  * 
  * @author dev-MichaelJohn
  */
-public abstract class BookLoanBuilder<T extends BookLoanBuilder<T>>  {
+public abstract class BorrowerBuilder<T extends BorrowerBuilder<T>> {
     private List<String> statements;
     private List<Object> values;
 
     public int id;
-    public int bookID;
-    public int borrowerID;
-    public Date dueDate;
-    public Date returnedAt;
-    public Date borrowedAt;
+    public String firstName;
+    public String middleName;
+    public String lastName;
+    public String contactNum;
 
-    public BookLoanBuilder() {
+    public BorrowerBuilder() {
         this.statements = new ArrayList<>();
         this.values = new ArrayList<>();
     }
@@ -36,18 +34,20 @@ public abstract class BookLoanBuilder<T extends BookLoanBuilder<T>>  {
      * @param value The value to be set for the field.
      * @return The current builder instance.
      */
-    protected T SetField(String statement, Object value) {
+    protected T SetField(String parameter, Object value) {
         // If the parameter string already contains a SQL placeholder ('?'),
-        // assume the caller provided the full condition (e.g. "title LIKE ?").
+        // assume the caller provided the full condition (e.g. "firstName LIKE ?").
         // In that case do not append " = ?" again (that caused "... = ? = ?").
-        if(statement != null && statement.indexOf('?') >= 0) statements.add(statement);
-        else statements.add(statement + " = ?");
+        if(parameter != null && parameter.indexOf('?') >= 0) {
+            statements.add(parameter);
+        } else {
+            statements.add(parameter + " = ?");
+        }
 
         values.add(value);
         return self();
     }
 
-    protected List<String> GetStatements() { return statements; }
-    protected List<Object> GetValues() { return values; }
-
+    protected List<String> GetStatements() { return this.statements; }
+    protected List<Object> GetValues() { return this.values; }
 }

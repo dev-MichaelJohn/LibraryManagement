@@ -37,6 +37,20 @@ public class ReadBookLoanBuilder extends BookLoanBuilder<ReadBookLoanBuilder> {
     }
 
     /**
+     * Sets the borrower ID condition for filtering book loan records.
+     * 
+     * @param borrowerID The borrower ID to filter by.
+     * @return The current ReadBookLoanBuilder instance.
+     */
+    public ReadBookLoanBuilder WhereBorrowerID(int borrowerID) {
+        if(borrowerID <= 0) throw new IllegalStateException("Borrower ID cannot be less than or equal to 0");
+        if(this.borrowerID != 0) throw new IllegalStateException("Borrower ID has already been set");
+
+        this.borrowerID = borrowerID;
+        return this.SetField("borrower_id", borrowerID);
+    }
+
+    /**
      * Sets the due date condition for filtering book loan records.
      * 
      * @param dueDate The due date to filter by.
