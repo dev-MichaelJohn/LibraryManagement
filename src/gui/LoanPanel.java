@@ -87,36 +87,62 @@ public class LoanPanel extends JPanel {
         returnedTable.setFillsViewportHeight(true);
         returnedTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
-        // Renderer that shows book title for the book id stored in the model
+        /**
+         * CUSTOM CELL RENDERER for Book ID column:
+         * 
+         * The database stores book IDs (1, 2, 3, etc.) but users want to see book titles.
+         * A cell renderer intercepts the display and converts the ID to a title.
+         * 
+         * This is like a "display formatter" - the data stays as IDs, but we show titles.
+         * 
+         * Performance optimization: We use bookTitleCache (loaded once at startup)
+         * instead of querying the database for every row. This is MUCH faster.
+         */
         javax.swing.table.TableCellRenderer titleRenderer = new DefaultTableCellRenderer() {
             @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            public Component getTableCellRendererComponent(JTable table, Object value, 
+                                                           boolean isSelected, boolean hasFocus, 
+                                                           int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 String text = "";
                 if(value != null) {
                     try {
+                        // value is a book ID (e.g., 1, 2, 3)
                         int bid = Integer.parseInt(String.valueOf(value));
+                        // Look up the title in our cache (in-memory map)
                         String t = bookTitleCache.get(bid);
+                        // Show title if found, otherwise show the ID as fallback
                         text = (t != null) ? t : String.valueOf(bid);
                     } catch(Exception ex) {
+                        // If anything fails, just show the value as-is
                         text = String.valueOf(value);
                     }
                 }
-                setText(text);
-                return this;
+                setText(text);  // Set the text to display
+                return this;    // Return the configured renderer component
             }
         };
 
-        // Renderer that shows borrower full name for the borrower id
+        /**
+         * CUSTOM CELL RENDERER for Borrower ID column:
+         * 
+         * Same concept as titleRenderer, but for borrowers.
+         * Converts borrower IDs to full names using the borrowerNameCache.
+         */
         javax.swing.table.TableCellRenderer borrowerRenderer = new DefaultTableCellRenderer() {
             @Override
-            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            public Component getTableCellRendererComponent(JTable table, Object value, 
+                                                           boolean isSelected, boolean hasFocus, 
+                                                           int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 String text = "";
                 if(value != null) {
                     try {
+                        // value is a borrower ID
                         int bid = Integer.parseInt(String.valueOf(value));
+                        // Look up the full name in our cache
                         String b = borrowerNameCache.get(bid);
+                        // Show name if found, otherwise show the ID
                         text = (b != null) ? b : String.valueOf(bid);
                     } catch(Exception ex) {
                         text = String.valueOf(value);
@@ -127,6 +153,15 @@ public class LoanPanel extends JPanel {
             }
         };
 
+        /**
+         * APPLY RENDERERS to all tables:
+         * 
+         * For each table (allTable, overdueTable, etc.):
+         * - Column 1 = Book ID → use titleRenderer to show book titles
+         * - Column 2 = Borrower ID → use borrowerRenderer to show borrower names
+         * 
+         * Now when the table displays these columns, it will show titles/names instead of IDs.
+         */
         allTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);
         allTable.getColumnModel().getColumn(2).setCellRenderer(borrowerRenderer);
         overdueTable.getColumnModel().getColumn(1).setCellRenderer(titleRenderer);

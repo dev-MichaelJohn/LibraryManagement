@@ -252,19 +252,27 @@ public class BookFormDialog extends JDialog {
     }
 
     /**
-     * Load existing genres for a book when updating.
+     * Load existing genres for a book when the dialog is opened in UPDATE mode.
+     * This populates the genre list UI with genres already associated with the book.
+     * 
+     * We also track the genre record IDs (from the database) so we know which ones
+     * are existing vs. new when we update later.
+     * 
+     * @param bookId The ID of the book to load genres for
      */
     private void loadExistingGenres(int bookId) {
         try {
+            // Query the database for all genres linked to this book
             List<Map<String, Object>> genres = BookGenreService.ReadBookGenre()
                 .WhereBookID(bookId)
                 .Read();
             
+            // Add each genre to the UI list and remember its database ID
             for(Map<String, Object> genreRecord : genres) {
-                String genre = (String) genreRecord.get("genre");
-                Integer id = (Integer) genreRecord.get("id");
-                genreListModel.addElement(genre);
-                genreRecordIds.add(id); // Store the record ID
+                String genre = (String) genreRecord.get("genre");      // The genre name
+                Integer id = (Integer) genreRecord.get("id");          // The database record ID
+                genreListModel.addElement(genre);                      // Show in list
+                genreRecordIds.add(id);                                // Track database ID
             }
         } catch(Exception e) {
             System.err.println("Error loading genres: " + e.getMessage());
@@ -273,17 +281,26 @@ public class BookFormDialog extends JDialog {
     }
 
     /**
-     * Save genres for a newly created book.
+     * Save genres for a newly created book (INSERT mode).
+     * 
+     * When a new book is added, the genres don't exist yet in the database.
+     * This method inserts each genre as a new record linked to the book.
+     * 
+     * @param bookId The ID of the newly inserted book
      */
     private void saveGenres(int bookId) {
+        // Iterate through all genres in the list
         for(int i = 0; i < genreListModel.size(); i++) {
             String genre = genreListModel.get(i);
-            // Validate genre is not empty before saving
+            
+            // Skip empty genres (validation)
             if(genre == null || genre.trim().isEmpty()) {
                 System.err.println("Skipping empty genre");
                 continue;
             }
+            
             try {
+                // Insert a new BookGenre record linking this book to this genre
                 BookGenreService.InsertBookGenre()
                     .SetBookID(bookId)
                     .SetGenre(genre.trim())
@@ -296,36 +313,65 @@ public class BookFormDialog extends JDialog {
     }
 
     /**
-     * Update genres for an existing book.
-     * Removes deleted genres, keeps existing ones, and adds new ones.
+     * Update genres for an existing book (UPDATE mode).
+     * 
+     * This method handles the complex logic of:
+     * 1. Deleting genres that were removed by the user
+     * 2. Keeping genres that weren't changed
+     * 3. Adding new genres that the user added
+     * 
+     * How does it know what's new vs. existing?
+     * - genreRecordIds stores the database ID for each genre
+     * - New genres have ID = -1 (special marker we set in the "Add Genre" code)
+     * - Existing genres have a real ID (> 0)
+     * 
+     * @param bookId The ID of the book to update genres for
      */
     private void updateGenres(int bookId) {
         try {
-            // Get current genres from database
+            // Get all genres currently in the database for this book
             List<Map<String, Object>> dbGenres = BookGenreService.ReadBookGenre()
                 .WhereBookID(bookId)
                 .Read();
             
-            // Find genres to delete (in DB but not in current list)
+            /**
+             * STEP 1: Find and delete genres that were removed
+             * 
+             * Scenario: Book had genres "Sci-Fi" and "Fiction".
+             * User removes "Fiction" and saves.
+             * We need to delete the "Fiction" record from the database.
+             */
             for(Map<String, Object> dbGenre : dbGenres) {
-                Integer dbId = (Integer) dbGenre.get("id");
+                Integer dbId = (Integer) dbGenre.get("id");  // Database record ID
+                
+                // Is this ID still in our current list?
                 if(!genreRecordIds.contains(dbId)) {
-                    // This genre was removed
+                    // No - user removed it, so delete it from database
                     BookGenreService.DeleteBookGenre()
                         .WhereID(dbId)
                         .Delete();
                 }
             }
             
-            // Add new genres (those with ID = -1)
+            /**
+             * STEP 2: Add new genres that the user added
+             * 
+             * Scenario: User adds "Adventure" and "Mystery" to the list.
+             * These have ID = -1 (our marker for "not yet in database").
+             * We need to insert them as new records.
+             */
             for(int i = 0; i < genreListModel.size(); i++) {
+                // Check if this is a new genre (marked with ID = -1)
                 if(genreRecordIds.get(i) == -1) {
                     String genre = genreListModel.get(i);
-                    // Validate genre is not empty before inserting
+                    
+                    // Skip empty genres (validation)
                     if(genre == null || genre.trim().isEmpty()) {
                         System.err.println("Skipping empty genre");
                         continue;
                     }
+                    
+                    // Insert the new genre into the database
                     BookGenreService.InsertBookGenre()
                         .SetBookID(bookId)
                         .SetGenre(genre.trim())

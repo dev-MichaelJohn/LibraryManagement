@@ -16,104 +16,202 @@ import javax.swing.filechooser.FileNameExtensionFilter;
  * Encapsulates the JTable and related actions (load, search, delete, update).
  * Now includes genre display and search functionality.
  * 
+ * This panel displays books in a table format and provides:
+ * - Add/Edit/Delete operations
+ * - Search functionality with debouncing
+ * - CSV import/export capabilities
+ * - Mouse and keyboard interactions
+ * 
  * @author AI
  */
 public class BookTablePanel extends JPanel {
-    private JTable table;
-    private DefaultTableModel tableModel;
-    private JFrame owner;
+    private JTable table;                   // The table that displays book data
+    private DefaultTableModel tableModel;   // The data model behind the table (holds rows/columns)
+    private JFrame owner;                   // Reference to parent frame (used for dialogs)
 
+    /**
+     * Constructor: Builds the entire Books panel with header, buttons, search, and table.
+     * 
+     * Layout structure (BorderLayout):
+     *   NORTH: header, buttons (Add, Import, Export) and search bar
+     *   CENTER: JTable with book data
+     *   
+     * @param owner The parent JFrame (used when opening dialogs like "Add Book" or "Edit Book")
+     */
     public BookTablePanel(JFrame owner) {
+        // Initialize as a JPanel with BorderLayout (organizes components in 5 regions: N, S, E, W, CENTER)
         super(new BorderLayout());
         this.owner = owner;
         
-        // Header integrated into the book tab
+        // ========== TOP SECTION: Header and Control Buttons ==========
         JPanel top = new JPanel(new BorderLayout());
+        
+        // Header label: "Books" (left side)
         JLabel header = new JLabel("Books");
-        header.setFont(header.getFont().deriveFont(Font.BOLD, 18f));
-        header.setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        header.setFont(header.getFont().deriveFont(Font.BOLD, 18f));  // Make it bold and larger
+        header.setBorder(BorderFactory.createEmptyBorder(8,8,8,8));   // Add padding around text
         top.add(header, BorderLayout.WEST);
 
+        // RIGHT SIDE: Control buttons (Add, Import, Export)
+        JPanel rightWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        /**
+         * ADD BOOK button:
+         * When clicked, opens a BookFormDialog (a modal dialog on top of the main window).
+         * The dialog allows user to enter book details. When user clicks "Save" in the dialog,
+         * the onSuccess callback fires, which calls loadBooks() to refresh the table.
+         */
         JButton addButton = new JButton("Add Book");
         addButton.setBorder(BorderFactory.createEmptyBorder(6,10,6,10));
         addButton.addActionListener(e -> {
+            // Create a new add dialog (no book ID means it's an add, not update)
             BookFormDialog d = new BookFormDialog(owner, new Runnable() { 
-                @Override public void run() { loadBooks(); } 
+                @Override public void run() { 
+                    loadBooks();  // Reload table after dialog closes successfully
+                } 
             });
-            d.setVisible(true);
+            d.setVisible(true);  // Show the dialog (blocks until user closes it)
         });
-        JPanel rightWrap = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         rightWrap.add(addButton);
+
+        /**
+         * IMPORT CSV button:
+         * Opens a file chooser dialog to let user select a CSV file to import.
+         * The CSV file should contain book data (Title, Author, ISBN, Year, optional Genres).
+         */
         JButton importBtn = new JButton("Import CSV");
         importBtn.setBorder(BorderFactory.createEmptyBorder(6,10,6,10));
         importBtn.addActionListener(e -> {
-            JFileChooser fc = new JFileChooser();
-            fc.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
-            int rv = fc.showOpenDialog(BookTablePanel.this);
-            if(rv == JFileChooser.APPROVE_OPTION) {
+            JFileChooser fc = new JFileChooser();  // File chooser dialog
+            fc.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));  // Only show .csv files
+            int rv = fc.showOpenDialog(BookTablePanel.this);  // Show dialog and wait for user choice
+            if(rv == JFileChooser.APPROVE_OPTION) {  // User clicked "Open"
                 File f = fc.getSelectedFile();
-                importBooksFromCSV(f);
+                importBooksFromCSV(f);  // Process the CSV file
             }
         });
         rightWrap.add(importBtn);
+
+        /**
+         * EXPORT CSV button:
+         * Exports all currently displayed table rows to a CSV file.
+         * The user chooses where to save it via a file chooser dialog.
+         */
         JButton exportBtn = new JButton("Export CSV");
         exportBtn.setBorder(BorderFactory.createEmptyBorder(6,10,6,10));
         exportBtn.addActionListener(e -> {
             JFileChooser fc = new JFileChooser();
             fc.setFileFilter(new FileNameExtensionFilter("CSV files", "csv"));
-            fc.setSelectedFile(new File("books_export.csv"));
-            int rv = fc.showSaveDialog(BookTablePanel.this);
+            fc.setSelectedFile(new File("books_export.csv"));  // Default filename suggestion
+            int rv = fc.showSaveDialog(BookTablePanel.this);   // Show save dialog
             if(rv == JFileChooser.APPROVE_OPTION) {
                 File f = fc.getSelectedFile();
-                exportTableToCSV(f);
+                exportTableToCSV(f);  // Write table data to CSV file
             }
         });
         rightWrap.add(exportBtn);
+        
         top.add(rightWrap, BorderLayout.EAST);
 
-        // Add search inside the Books tab (debounced SearchPanel)
+        /**
+         * SEARCH PANEL:
+         * The SearchPanel handles the debounced search UI (dropdown for criteria, text field, clear button).
+         * When user types, it waits 350ms then calls the onSearch callback with the search term and criteria.
+         * We implement the SearchListener interface to receive those callbacks and call performSearch().
+         */
         SearchPanel search = new SearchPanel(new SearchPanel.SearchListener() {
             @Override public void onSearch(String criteria, String term) { 
-                performSearch(criteria, term); 
+                performSearch(criteria, term);  // Execute search with the given criteria and term
             }
         });
         top.add(search, BorderLayout.SOUTH);
-        add(top, BorderLayout.NORTH);
+        
+        add(top, BorderLayout.NORTH);  // Add the entire top panel (header + buttons + search) to NORTH
 
-        // Updated columns to include Genres
+        // ========== TABLE SETUP: Define columns and create JTable ==========
+        
+        /**
+         * Define table columns: ID, Title, Author, ISBN, Year, Genres, Available
+         * These will appear as column headers in the table.
+         */
         String[] columns = new String[] {"ID", "Title", "Author", "ISBN", "Year", "Genres", "Available"};
+        
+        /**
+         * DefaultTableModel is the data structure behind the JTable.
+         * Think of it as a 2D array: rows are books, columns are the fields above.
+         * We override isCellEditable() to return false, meaning users can't directly edit cells in the table.
+         * Instead, they must use the "Update" button or menu to open the edit dialog.
+         */
         tableModel = new DefaultTableModel(columns, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
         };
 
+        /**
+         * Create the JTable:
+         * - Pass the data model so the table knows what columns and rows to display
+         * - setFillsViewportHeight(true): if table is small, it fills the available space
+         * - MULTIPLE_INTERVAL_SELECTION: users can select multiple rows by holding Ctrl
+         */
         table = new JTable(tableModel);
         table.setFillsViewportHeight(true);
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
-        // mouse handling for popup and double-click update
+        /**
+         * MOUSE LISTENER: Handles right-click (context menu) and double-click (edit) actions
+         * 
+         * mouseClicked fires every time user clicks in the table. The 'e' parameter tells us:
+         * - e.getPoint(): where the click happened (x, y coordinates)
+         * - e.getClickCount(): 1 for single click, 2 for double-click, etc.
+         * - SwingUtilities.isRightMouseButton(): true if it was a right-click
+         * - SwingUtilities.isLeftMouseButton(): true if it was a left-click
+         */
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                // Find which row was clicked (rowAtPoint converts screen coords to table row number)
                 int row = table.rowAtPoint(e.getPoint());
-                if(row < 0) return;
+                if(row < 0) return;  // Invalid row (click was in empty area)
+                
+                // Make sure the clicked row is selected
                 if(!table.isRowSelected(row)) table.setRowSelectionInterval(row, row);
 
+                // RIGHT-CLICK: Show context menu
                 if (SwingUtilities.isRightMouseButton(e) || e.isPopupTrigger()) {
                     if(!table.isRowSelected(row)) table.setRowSelectionInterval(row, row);
-                    showRowPopup(e, row);
-                } else if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
-                    showUpdateDialogForRow(row);
+                    showRowPopup(e, row);  // Show the context menu at click location
+                } 
+                // DOUBLE-CLICK: Open edit dialog
+                else if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    showUpdateDialogForRow(row);  // Open edit dialog for this row's book
                 }
             }
         });
 
-        // delete with Delete key
+        /**
+         * KEYBOARD SHORTCUT: Delete key
+         * 
+         * This is an advanced Swing feature:
+         * 1. getInputMap(): Get the keyboard mapping for this component
+         *    WHEN_ANCESTOR_OF_FOCUSED_COMPONENT means: respond to key presses whenever this table (or its children) has focus
+         * 2. put(KeyStroke, actionName): Map the Delete key to the action name "deleteRows"
+         * 3. getActionMap(): Maps action names to actual code (AbstractAction)
+         * 
+         * Result: When user presses Delete while table has focus, deleteSelectedRows() is called
+         */
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
             .put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "deleteRows");
         table.getActionMap().put("deleteRows", new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) { deleteSelectedRows(); }
+            @Override public void actionPerformed(ActionEvent e) { 
+                deleteSelectedRows();  // Delete all selected rows
+            }
         });
 
+        /**
+         * CENTER: Add the table to the center of the panel, wrapped in a JScrollPane
+         * 
+         * JScrollPane adds scrollbars (vertical and/or horizontal) so user can navigate large tables.
+         * Without it, if the table is bigger than the panel, content would be clipped.
+         */
         add(new JScrollPane(table), BorderLayout.CENTER);
     }
 
@@ -138,36 +236,80 @@ public class BookTablePanel extends JPanel {
         }
     }
 
+    /**
+     * Load all books from the database and populate the table.
+     * 
+     * This method demonstrates the SWINGWORKER pattern - a special Swing pattern for running
+     * long operations (like database queries) without freezing the UI.
+     * 
+     * Why SwingWorker?
+     * If we directly call BookService.ReadBook().Read() here, the UI thread blocks while waiting
+     * for the database to return data. This freezes the entire application - user can't click buttons,
+     * resize windows, etc. SwingWorker solves this by:
+     * 1. Running the database query on a background thread (doInBackground)
+     * 2. Automatically switching back to the UI thread to display results (done)
+     */
     public void loadBooks() {
+        // Show a "wait" cursor (spinning circle icon) to indicate the app is working
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        
+        /**
+         * SwingWorker<ResultType, ProgressType>:
+         * - ResultType = List<Map<String, Object>> (the data the background task returns)
+         * - ProgressType = Void (we don't use progress updates in this case)
+         */
         new javax.swing.SwingWorker<java.util.List<Map<String, Object>>, Void>() {
-            Exception error = null;
+            Exception error = null;  // Store any error that occurs in the background thread
             
+            /**
+             * doInBackground: This runs on a BACKGROUND THREAD (not the UI thread).
+             * Long operations like database queries should be here to keep the UI responsive.
+             * 
+             * IMPORTANT: Never update UI components directly from here! UI updates must happen
+             * on the UI thread (which is done in the done() method instead).
+             * 
+             * @return The list of all books from the database
+             */
             @Override 
             protected java.util.List<Map<String, Object>> doInBackground() {
                 try {
+                    // Query database for all books
                     return BookService.ReadBook().Read();
                 } catch(Exception ex) { 
+                    // Store error to throw later in done() method
                     error = ex; 
+                    // Return empty list so done() doesn't crash
                     return java.util.Collections.emptyList(); 
                 }
             }
             
+            /**
+             * done: This is called automatically after doInBackground finishes.
+             * It runs on the UI THREAD, so we can safely update UI components here.
+             * 
+             * This is where we populate the table with the results from doInBackground.
+             */
             @Override 
             protected void done() {
                 try {
+                    // Get the result from doInBackground (this will block if not done yet, but it should be)
                     java.util.List<Map<String, Object>> rows = get();
+                    
+                    // Clear all existing rows in the table model
                     tableModel.setRowCount(0);
+                    
+                    // Add each book as a new row in the table
                     for(Map<String, Object> r : rows) {
+                        // Extract fields from the book record, with fallback names for different DB schemas
                         Object id = r.getOrDefault("id", r.getOrDefault("book_id", ""));
                         Object title = r.getOrDefault("title", "");
                         Object author = r.getOrDefault("author", "");
                         Object isbn = r.getOrDefault("isbn", "");
                         Object year = r.getOrDefault("year_published", r.getOrDefault("year", ""));
                         Object rawAvailable = r.getOrDefault("is_available", r.getOrDefault("is_avaible", null));
-                        String available = formatAvailable(rawAvailable);
+                        String available = formatAvailable(rawAvailable);  // Convert boolean/int to "Yes"/"No"
                         
-                        // Fetch genres for this book
+                        // Fetch genres for this book (separate DB query, could be optimized)
                         String genres = "";
                         try {
                             int bookId = Integer.parseInt(String.valueOf(id));
@@ -176,17 +318,22 @@ public class BookTablePanel extends JPanel {
                             System.err.println("Error getting genres: " + ex.getMessage());
                         }
                         
+                        // Add row to table: [ID, Title, Author, ISBN, Year, Genres, Available]
                         tableModel.addRow(new Object[] { id, title, author, isbn, year, genres, available });
                     }
+                    
+                    // If an error occurred in the background, throw it now to show error dialog
                     if(error != null) throw error;
                 } catch(Exception ex) {
+                    // Show error dialog to user
                     JOptionPane.showMessageDialog(BookTablePanel.this, 
                         "Failed to load books: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 } finally {
+                    // Always restore normal cursor (not wait cursor) when done
                     setCursor(Cursor.getDefaultCursor());
                 }
             }
-        }.execute();
+        }.execute();  // Start the background worker thread
     }
 
     public void performSearch(String criteria, String term) {

@@ -10,98 +10,193 @@ import java.awt.event.ActionListener;
 
 /**
  * Dialog to Add or Update a book loan.
+ * 
+ * This modal dialog allows users to:
+ * - Search for and select a book to loan
+ * - Select a borrower
+ * - Set loan dates (borrowed, due, returned)
+ * 
+ * It has two modes:
+ * 1. ADD MODE: Creates a new loan (constructor with just onSuccess)
+ * 2. UPDATE MODE: Modifies an existing loan (constructor with all loan details)
+ * 
+ * Key feature: Debounced search for books - as user types in the search field,
+ * the book list updates after a 300ms delay (to avoid excessive database queries).
  *
  * @author AI
  */
 public class LoanFormDialog extends JDialog {
-    private boolean isUpdateForm;
+    private boolean isUpdateForm;  // Flag to track whether we're adding or updating
 
-    // date formatting handled by JSpinner editors
-
-    // Add mode
+    // ========== CONSTRUCTORS ==========
+    
+    /**
+     * Constructor for ADD mode (creating a new loan).
+     * 
+     * @param owner The parent JFrame (used for dialogs and positioning)
+     * @param onSuccess Callback to execute after successful save (typically refreshes the loan table)
+     */
     public LoanFormDialog(JFrame owner, Runnable onSuccess) {
-        super(owner, "Add Loan", true);
-        init(null, onSuccess);
+        super(owner, "Add Loan", true);  // "Add Loan" title, modal (true)
+        init(null, onSuccess);           // null means no existing loan data (it's a new one)
     }
 
-    // Update mode (loanId is the loan record id)
-    public LoanFormDialog(JFrame owner, int loanId, int bookId, int borrowerId, String due, String borrowedAt, String returnedAt, Runnable onSuccess) {
-        super(owner, "Update Loan", true);
-        this.isUpdateForm = true;
+    /**
+     * Constructor for UPDATE mode (modifying an existing loan).
+     * 
+     * @param owner The parent JFrame
+     * @param loanId The ID of the loan record to update
+     * @param bookId The currently loaned book ID
+     * @param borrowerId The ID of the borrower
+     * @param due The due date string
+     * @param borrowedAt The borrow date string
+     * @param returnedAt The return date string (null if not yet returned)
+     * @param onSuccess Callback after successful save
+     */
+    public LoanFormDialog(JFrame owner, int loanId, int bookId, int borrowerId, String due, 
+                         String borrowedAt, String returnedAt, Runnable onSuccess) {
+        super(owner, "Update Loan", true);  // "Update Loan" title, modal
+        this.isUpdateForm = true;           // Mark as update mode
         init(new LoanData(loanId, bookId, borrowerId, due, borrowedAt, returnedAt), onSuccess);
     }
 
+    /**
+     * Initialize the dialog UI: build the form with all fields and buttons.
+     * 
+     * @param data Loan data if updating, or null if adding new
+     * @param onSuccess Callback to run after successful save
+     */
     private void init(LoanData data, Runnable onSuccess) {
-        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        setResizable(false);
+        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);  // Close button disposes this dialog
+        setResizable(false);                                  // User can't resize window
 
+        // Main form panel using GridBagLayout (gives fine-grained control over position)
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6,6,6,6);
+        gbc.insets = new Insets(6,6,6,6);   // 6px padding between components
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // ============ BOOK SECTION ============
+        // ========== BOOK SELECTION SECTION ==========
+        
         JLabel bookLabel = new JLabel("Book:");
-        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2; gbc.weightx = 1.0; gbc.anchor = GridBagConstraints.WEST; gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2; gbc.weightx = 1.0; 
+        gbc.anchor = GridBagConstraints.WEST; gbc.fill = GridBagConstraints.HORIZONTAL;
         form.add(bookLabel, gbc);
 
-        // Book search field
+        /**
+         * BOOK SEARCH FIELD:
+         * User types a book title here. As they type, the list below updates
+         * (with 300ms debounce delay to avoid excessive database queries).
+         */
         JLabel bookSearchLabel = new JLabel("Search by Title:");
-        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST; gbc.fill = GridBagConstraints.NONE;
+        gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 0.0; 
+        gbc.anchor = GridBagConstraints.EAST; gbc.fill = GridBagConstraints.NONE;
         form.add(bookSearchLabel, gbc);
 
         JTextField searchField = new JTextField(30);
         searchField.setToolTipText("Search by title...");
-        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 1.0; gbc.anchor = GridBagConstraints.WEST; gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.gridx = 1; gbc.gridy = 1; gbc.gridwidth = 1; gbc.weightx = 1.0; 
+        gbc.anchor = GridBagConstraints.WEST; gbc.fill = GridBagConstraints.HORIZONTAL;
         form.add(searchField, gbc);
 
-        // Book list
+        /**
+         * BOOK LIST:
+         * Displays books matching the search (or all books if search is empty).
+         * User clicks to select which book to loan.
+         * 
+         * DefaultListModel is like a simple array/list for the JList to display.
+         * JList is the display component that shows the model's contents.
+         */
         DefaultListModel<BookItem> listModel = new DefaultListModel<>();
         JList<BookItem> resultsList = new JList<>(listModel);
-        resultsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        resultsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);  // Can only select one book
         JScrollPane listScroll = new JScrollPane(resultsList);
-        listScroll.setPreferredSize(new Dimension(400, 80));
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.weightx = 1.0; gbc.weighty = 0.1; gbc.anchor = GridBagConstraints.CENTER; gbc.fill = GridBagConstraints.BOTH;
+        listScroll.setPreferredSize(new Dimension(400, 80));  // Size of list display
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.weightx = 1.0; 
+        gbc.weighty = 0.1; gbc.anchor = GridBagConstraints.CENTER; gbc.fill = GridBagConstraints.BOTH;
         form.add(listScroll, gbc);
 
-        // selected book area
+        /**
+         * SELECTED BOOK DISPLAY:
+         * Shows the title of the currently selected book (read-only).
+         * This gives user visual feedback of which book they selected.
+         */
         JTextArea selectedTitle = new JTextArea(1, 40);
-        selectedTitle.setLineWrap(true); selectedTitle.setWrapStyleWord(true); selectedTitle.setEditable(false); selectedTitle.setText("(no book selected)");
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.weightx = 1.0; gbc.weighty = 0.0; gbc.anchor = GridBagConstraints.CENTER; gbc.fill = GridBagConstraints.BOTH;
+        selectedTitle.setLineWrap(true);         // Wrap long titles to multiple lines
+        selectedTitle.setWrapStyleWord(true);    // Wrap at word boundaries, not mid-word
+        selectedTitle.setEditable(false);        // User can't type here
+        selectedTitle.setText("(no book selected)");  // Default text
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; gbc.weightx = 1.0; 
+        gbc.weighty = 0.0; gbc.anchor = GridBagConstraints.CENTER; gbc.fill = GridBagConstraints.BOTH;
         form.add(new JScrollPane(selectedTitle), gbc);
 
-        // load initial list of books in background (no block)
+        /**
+         * LOAD BOOKS IN BACKGROUND:
+         * When the dialog opens, load all books from database in background thread.
+         * This doesn't freeze the UI while we wait for database results.
+         * 
+         * SwingWorker pattern:
+         * - doInBackground: runs on background thread, queries database
+         * - done: runs on UI thread, populates the list with results
+         */
         Runnable doLoadAll = () -> new javax.swing.SwingWorker<java.util.List<BookItem>, Void>() {
             Exception error = null;
-            @Override protected java.util.List<BookItem> doInBackground() {
+            
+            @Override 
+            protected java.util.List<BookItem> doInBackground() {
                 try {
                     java.util.List<BookItem> out = new java.util.ArrayList<>();
+                    // Query database for all books
                     java.util.List<java.util.Map<String, Object>> rows = BookService.ReadBook().Read();
+                    
+                    // Convert each database record to a BookItem (id + title)
                     for(java.util.Map<String, Object> r : rows) {
                         Object id = r.getOrDefault("id", r.getOrDefault("book_id", ""));
                         Object title = r.getOrDefault("title", "");
-                        try { int iid = Integer.parseInt(String.valueOf(id)); out.add(new BookItem(iid, String.valueOf(title))); } catch(Exception ignore) { }
+                        try { 
+                            int iid = Integer.parseInt(String.valueOf(id)); 
+                            out.add(new BookItem(iid, String.valueOf(title))); 
+                        } catch(Exception ignore) { }
                     }
                     return out;
-                } catch(Exception ex) { error = ex; return java.util.Collections.emptyList(); }
+                } catch(Exception ex) { 
+                    error = ex; 
+                    return java.util.Collections.emptyList(); 
+                }
             }
-            @Override protected void done() {
+            
+            @Override 
+            protected void done() {
                 try {
+                    // Get results from background thread
                     java.util.List<BookItem> items = get();
-                    listModel.clear();
-                    for(BookItem it : items) listModel.addElement(it);
-                    if(data != null) {
-                        // preselect
-                        for(int i=0;i<listModel.getSize();i++) if(listModel.get(i).id == data.bookId) { resultsList.setSelectedIndex(i); selectedTitle.setText(listModel.get(i).title); break; }
+                    listModel.clear();  // Clear any old items
+                    
+                    // Add all books to the list
+                    for(BookItem it : items) {
+                        listModel.addElement(it);
                     }
+                    
+                    // If updating an existing loan, pre-select the current book
+                    if(data != null) {
+                        for(int i=0; i<listModel.getSize(); i++) {
+                            if(listModel.get(i).id == data.bookId) {
+                                resultsList.setSelectedIndex(i);           // Highlight it
+                                selectedTitle.setText(listModel.get(i).title);  // Show title
+                                break;
+                            }
+                        }
+                    }
+                    
                     if(error != null) throw error;
                 } catch(Exception ex) {
-                    JOptionPane.showMessageDialog(LoanFormDialog.this, "Failed to load books: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(LoanFormDialog.this, 
+                        "Failed to load books: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
         }.execute();
 
-        doLoadAll.run();
+        doLoadAll.run();  // Start loading books
 
         // debounce search
         final javax.swing.Timer searchTimer = new javax.swing.Timer(300, ev -> {
